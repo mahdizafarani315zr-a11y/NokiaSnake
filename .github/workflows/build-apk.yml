@@ -20,35 +20,39 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Setup Android SDK
+      - name: Setup Android
         uses: android-actions/setup-android@v3
 
-      - name: Install Android SDK
+      - name: Install SDK
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
       - name: Extract project
         run: |
+          set -e
+          ZIP=$(find . -maxdepth 1 -iname '*.zip' -print -quit)
+          test -n "$ZIP"
           mkdir extracted
-          ZIP=$(find . -maxdepth 1 -name '*.zip' -print -quit)
           unzip -q "$ZIP" -d extracted
-          SETTINGS=$(find extracted -type f -name settings.gradle -print -quit)
+          SETTINGS=$(find extracted -type f \( -name settings.gradle -o -name settings.gradle.kts \) -print -quit)
+          test -n "$SETTINGS"
           PROJECT_DIR=$(dirname "$SETTINGS")
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
       - name: Install Gradle
         run: |
-          wget https://services.gradle.org/distributions/gradle-8.9-bin.zip
+          wget -q https://services.gradle.org/distributions/gradle-8.9-bin.zip
           unzip -q gradle-8.9-bin.zip
           echo "$GITHUB_WORKSPACE/gradle-8.9/bin" >> "$GITHUB_PATH"
 
       - name: Build APK
+        id: build
+        continue-on-error: true
         run: |
           cd "$PROJECT_DIR"
+          set -o pipefail
           gradle --no-daemon assembleDebug --stacktrace --info 2>&1 | tee "$GITHUB_WORKSPACE/build-log.txt"
-        continue-on-error: true
-        id: build
 
-      - name: Save build log
+      - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -61,5 +65,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: NokiaSnake-APK
-          path: extracted/**/app/build/outputs/apk/debug/app-debug.apk
+          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
           
